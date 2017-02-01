@@ -2,12 +2,12 @@ binpatch
 ========
 
 A simple tool for patching the code of running binaries.
-Currently extremely primitive, and doesn't properly handle basically any case where an updated function references other symbols or static data.
+Suggestion to write such a tool due to [Max Justicz](https://github.com/justicz).
 
-**WARNING:** This means that this tool will fail on all but extremely primitive examples!
-Further, there exist many race conditions, as currently binpatch doesn't carefully check what state the target is in when it attaches.
-The goal is to make it work better eventually.
-Feel free to submit pull requests.
+**WARNING:** This tool isn't useful yet!
+It doesn't handle inter-symbol references correctly yet, and thus crashes in basically any non-trivial example.
+Further, there exist race conditions, as currently binpatch doesn't carefully check what state the target is in when it attaches.
+The goal is to make it work better eventually; feel free to submit pull requests.
 
 Example usage
 -------------
