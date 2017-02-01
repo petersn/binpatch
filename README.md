@@ -49,7 +49,7 @@ You can then apply this migration to a running `examples/counter` process with:
     $ ./binpatch --apply migration1 --pid PID
 
 If the above fails (especially on Ubuntu) it may be because of hardening that blocks processes from ptracing non-children.
-You can disable this protection with:
+You can either run binpatch as root, or disable this protection with:
 
     $ echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
 
