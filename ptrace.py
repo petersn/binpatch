@@ -6,8 +6,9 @@ __all__ = ["Memory"]
 
 def export_func(f):
 	__all__.append(f.func_name)
+	return f
 
-import ctypes, os
+import ctypes, os, subprocess
 from ctypes import c_void_p, c_int, c_uint, c_long, c_ulong
 
 # From /usr/include/sys/user.h
@@ -72,13 +73,11 @@ PTRACE_ATTACH = 16
 PTRACE_DETACH = 17
 PTRACE_SYSCALL = 24
 
-@staticmethod
 def check(result):
 	if result < 0:
 		errno = ctypes.get_errno()
 		raise OSError(errno, os.strerror(errno), "")
 
-@staticmethod
 def _basic(command, pid):
 	check(ptrace(command, pid, 0, 0))
 	status = c_int()
@@ -88,45 +87,37 @@ def _basic(command, pid):
 	return status
 
 @export_func
-@staticmethod
 def attach(pid):
 	return _basic(PTRACE_ATTACH, pid)
 
 @export_func
-@staticmethod
 def detach(pid):
 	check(ptrace(PTRACE_DETACH, pid, 0, 0))
 
 @export_func
-@staticmethod
 def syscall(pid):
 	return _basic(PTRACE_SYSCALL, pid)
 
 @export_func
-@staticmethod
 def singlestep(pid):
 	return _basic(PTRACE_SINGLESTEP, pid)
 
 @export_func
-@staticmethod
 def cont(pid):
 	check(ptrace(PTRACE_CONT, pid, 0, 0))
 
 @export_func
-@staticmethod
 def getregs(pid):
 	urs = user_regs_struct()
 	check(ptrace(PTRACE_GETREGS, pid, 0, ctypes.byref(urs)))
 	return urs.to_dict()
 
 @export_func
-@staticmethod
 def setregs(pid, d):
 	urs = user_regs_struct.from_dict(d)
 	check(ptrace(PTRACE_SETREGS, pid, 0, ctypes.byref(urs)))
 
 @export_func
-@staticmethod
 def get_maps(pid):
 	mappings = []
 	with open("/proc/%i/maps" % pid) as f:
@@ -179,5 +170,5 @@ class Memory:
 			bytes_written = os.write(self.fd, y)
 			assert bytes_written == len(y), "Bad write on mem. Wrote %r bytes, wanted to write %r" % (bytes_written, len(y))
 			return
-		self[x:x+1] = y
+		self[x:x+len(y)] = y
 
