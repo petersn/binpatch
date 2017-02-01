@@ -1,5 +1,6 @@
 // Simple spin loop to inspect.
 
+#include <sys/types.h>
 #include <unistd.h>
 #include <stdio.h>
 
@@ -9,13 +10,12 @@ int func(int x) {
 	x += 1;
 #else
 	x += 2;
-	volatile int y = 0;
-	y += 1;
 #endif
 	return x;
 }
 
 int main(int argc, char** argv) {
+	printf("My pid: %i\n", getpid());
 	int counter = 0;
 	while (1) {
 		// Increment the counter by using our function, either by 1 or 2,
