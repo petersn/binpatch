@@ -26,7 +26,7 @@ There will be a simple program in there that counts up:
     ^C
 
 This program has a function `int func(int x)` that returns `x + 1`, which is used for the counting.
-There's another program, `examples/counter\_new` which was compiled from the same source, except a macro is defined making `func(x)` return `x + 2`, and thus this binary counts by twos:
+There's another program, `examples/counter_new` which was compiled from the same source, except a macro is defined making `func(x)` return `x + 2`, and thus this binary counts by twos:
 
     $ ./examples/counter
     My pid: 12346
@@ -35,7 +35,7 @@ There's another program, `examples/counter\_new` which was compiled from the sam
     Value: 6
     ^C
 
-Our goal is to launch `examples/counter`, and replace the code of its `func()` in the running binary with that from `examples/counter\_new`.
+Our goal is to launch `examples/counter`, and replace the code of its `func()` in the running binary with that from `examples/counter_new`.
 
 To accomplish this we first produce a *migration* file as follows:
 
