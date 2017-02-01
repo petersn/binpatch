@@ -90,14 +90,15 @@ def apply_migration(migration, pid):
 			ctx.mem[address] = data
 		elif command[0] == "mmap":
 			# Pick a convenient location to request the new code be loaded to.
-			# Currently we load as one page above the top of the current first mapping.
+			# Currently we load directly above the top of the current first mapping.
+			# This is convenient because then gdb's asm layout will scroll directly into the loaded code.
 			# TODO: Make this less fragile! This currently makes many assumptions, such as that the first
 			# mapping is the main executable, and that there's space immediately above it to allocate to.
 			# TODO: Check ctx.maps, and find a good robust place to put this block.
 			data = command[1]
 			data_size_rounded_up = ((len(data) + utils.PAGE_SIZE - 1) / utils.PAGE_SIZE) * utils.PAGE_SIZE
 			print "Loading block of length %i" % data_size_rounded_up
-			target_location = ctx.maps[0]["address"][1] + utils.PAGE_SIZE
+			target_location = ctx.maps[0]["address"][1]
 			ret = ctx.perform_syscall(utils.SYS_MMAP, [
 				target_location,
 				data_size_rounded_up,
@@ -112,6 +113,7 @@ def apply_migration(migration, pid):
 				exit(3)
 			mmap_address = ret
 			print "Got mmaped block at: %x" % mmap_address
+			ctx.mem[mmap_address] = data
 		elif command[0] == "mmap_relative_jump":
 			source_rel, source, dest_rel, dest = command[1:]
 			if source_rel:
