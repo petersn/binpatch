@@ -1,5 +1,5 @@
 
-all: counter counter_new
+all: counter counter.o counter_new counter_new.o
 
 %_new.o: %.c Makefile
 	$(CC) -c -o $@ $< -DNEW

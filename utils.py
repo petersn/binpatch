@@ -2,7 +2,7 @@
 # Written by Peter Schmidt-Nielsen (snp@mit.edu) in 2017
 # Licensed under CC0 (Public Domain)
 
-import time, os, struct, subprocess
+import time, os, struct, subprocess, re
 import ptrace
 
 PAGE_SIZE = 4096
@@ -182,8 +182,8 @@ class Objdump:
 			flags = first_half[17:24]
 			section = first_half[25:]
 			size = int(second_half[:16], 16) 
-			assert second_half[16:30] == " "*14, "Weirdly formatted objdump output."
-			name = second_half[30:]
+#			assert second_half[16:30] == " "*14, "Weirdly formatted objdump output."
+			name = second_half[16:].lstrip()
 
 			assert flags[5] == "d" or (name not in self.symbols), "BUG BUG BUG! Duplicate non-debug symbol name %r!" % (name,)
 
@@ -205,6 +205,38 @@ class Objdump:
 				continue
 			self.function_symbols.add(symbol)
 
+		# Parse the relocation records.
+		objdump_text = subprocess.check_output(["objdump", "-r", path])
+		lines = objdump_text.split("\n")
+
+		# Skip the first two lines of header.
+		self.relocations = {}
+		current_reloc_section = None
+		for line in lines[2:]:
+			if not line:
+				continue
+			m = re.match("RELOCATION RECORDS FOR [[](.*)[]]:", line)
+			if m:
+				current_reloc_section = m.groups()[0]
+				continue
+			if line.strip() == "OFFSET           TYPE              VALUE":
+				continue
+			offset, reloc_type, value = line.split()
+			offset = int(offset, 16)
+			delta = 0
+			m = re.match("(.*)([-+]0x[0-9a-f]+)", value)
+			if m:
+				base, delta = m.groups()
+				delta = int(delta, 16)
+
+			if current_reloc_section not in self.relocations:
+				self.relocations[current_reloc_section] = []
+			self.relocations[current_reloc_section].append({
+				"offset": offset,
+				"type": reloc_type,
+				"value": (base, delta),
+			})
+
 	def read_symbol(self, symbol):
 		if symbol not in self.symbol_cache:
 			properties = self.symbols[symbol]
@@ -220,21 +252,13 @@ class Objdump:
 		return self.symbol_cache[symbol]
 
 if __name__ == "__main__":
-	o = Objdump("examples/counter")
-	print o.function_symbols
-
-## Code location.
-#code_location = maps[0]["address"][1] + 4096
-#print "Code location:", hex(code_location)
-
-##r = perform_syscall(62, [23913, 9])
-#r = perform_syscall(9, [code_location, 4096, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0])
-#print "Got:", hex(r)
-
-#test_write_capability(r)
-##print "Got:", r, os.strerror(-r)
-
-#ptrace.detach(pid)
-##ptrace.cont(pid)
-#time.sleep(3.0)
+	import pprint, sys
+	o = Objdump(sys.argv[1])
+	print "=== Sections:"
+	pprint.pprint(o.sections)
+	print "=== Symbols:"
+	pprint.pprint(o.symbols)
+	print "=== Function symbols:", o.function_symbols
+	print "=== Relocations:"
+	pprint.pprint(o.relocations)
 
