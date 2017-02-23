@@ -6,10 +6,14 @@ import os, sys, time, base64, subprocess, atexit
 import ptrace
 import utils
 
-def make_migration(old_path, new_path):
-	old = utils.Objdump(old_path)
-	new = utils.Objdump(new_path)
+def make_migration(old_path, old_obj_path, new_path, new_obj_path):
+	# Read in the four binaries.
+	old     = utils.Objdump(old_path)
+	old_obj = utils.Objdump(old_obj_path)
+	new     = utils.Objdump(new_path)
+	new_obj = utils.Objdump(new_obj_path)
 
+	# Output buffer for our migration. We return "\n".join(output)
 	output = []
 
 	# Get new functions, but ignore them for now.	
@@ -134,6 +138,8 @@ if __name__ == "__main__":
 	creation = p.add_argument_group(title="Migration Creation", description="These arguments are for producing migration files, for later application.")
 	creation.add_argument("--old", help="Old binary, to produce migration.")
 	creation.add_argument("--new", help="New binary, to produce migration.")
+	creation.add_argument("--old-obj", help="Old object file, to produce migration.")
+	creation.add_argument("--new-obj", help="New object file, to produce migration.")
 	creation.add_argument("-o", "--output", help="Output path to write a migration to.")
 
 	apply_patch = p.add_argument_group(title="Apply", description="These arguments are for actually applying a migration to a given running binary.")
@@ -155,8 +161,15 @@ if __name__ == "__main__":
 		print >>sys.stderr, "Do you want to create a migration, or apply one? (See --help)"
 		exit(1)
 
+	# By default use the compiled binaries for the object files.
+	# This will make us lose relocation records, and the operation will be extremely unreliable!
+	if args.old_obj == None:
+		args.old_obj = args.old
+	if args.new_obj == None:
+		args.new_obj = args.new
+
 	if args.output != None:
-		data = make_migration(args.old, args.new)
+		data = make_migration(args.old, args.old_obj, args.new, args.new_obj)
 		with open(args.output, "w") as f:
 			f.write(data)
 

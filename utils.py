@@ -14,6 +14,26 @@ MAP_PRIVATE = 0x02
 MAP_ANONYMOUS = 0x20
 SYS_MMAP = 9
 
+# The size (in bytes) of the field that is written to to accomplish a given type of relocation.
+relocation_byte_sizes = {
+	"R_X86_64_32": 4,
+	"R_X86_64_PC32": 4,
+}
+
+def color_diff(a, b, special_indices=set()):
+	red = "\033[91m"
+	blue = "\033[94m"
+	normal = "\033[0m"
+	o = []
+	for i in xrange(len(a)):
+		if i/2 in special_indices:
+			o.append(blue + a[i] + normal)
+		elif i < len(b) and b[i] != a[i]:
+			o.append(red + a[i] + normal)
+		else:
+			o.append(a[i])
+	return "".join(o)
+
 class Context:
 	def __init__(self, pid):
 		self.pid = pid
@@ -192,6 +212,7 @@ class Objdump:
 				"section": section,
 				"size": size,
 				"flags": flags,
+				"relocations": [],
 			}
 
 		# Compute our function symbols.
@@ -210,7 +231,7 @@ class Objdump:
 		lines = objdump_text.split("\n")
 
 		# Skip the first two lines of header.
-		self.relocations = {}
+		self.relocations = []
 		current_reloc_section = None
 		for line in lines[2:]:
 			if not line:
@@ -229,13 +250,40 @@ class Objdump:
 				base, delta = m.groups()
 				delta = int(delta, 16)
 
-			if current_reloc_section not in self.relocations:
-				self.relocations[current_reloc_section] = []
-			self.relocations[current_reloc_section].append({
+			self.relocations.append({
+				"section": current_reloc_section,
 				"offset": offset,
 				"type": reloc_type,
 				"value": (base, delta),
 			})
+
+		# Compute a table of approximate matches for generous lookup.
+		#self.generous_lookup = self.symbols.copy()
+		self.hard_to_locate_symbols = set()
+		for symbol_name, symbol in self.symbols.iteritems():
+			if "@" in symbol_name:
+				self.hard_to_locate_symbols.add(symbol_name.split("@", 1)[0])
+#				self.generous_lookup[symbol_name.split("@", 1)[0]] = symbol
+
+		# As final processing, we now match up relocations with symbols.
+		for reloc in self.relocations:
+			# TODO: Replace this linear time scan with a binary search.
+			# We now try to find a symbol that is patched up by this relocation.
+			for symbol in self.symbols.itervalues():
+				if symbol["section"] != reloc["section"]:
+					continue
+				section = self.sections[symbol["section"]]
+				# Make sure the reloc is within the given symbol in this section.
+				# To do this we first compute the offset into the section at which the symbol resides.
+				section_offset_start = symbol["address"] - section["lma"]
+				section_offset_end   = symbol["address"] + symbol["size"] - section["lma"]
+				# Note: I'm not careful about relocations that span the end or start of a symbol.
+				# I should probably assert on those here...
+				if not (section_offset_start <= reloc["offset"] < section_offset_end):
+					continue
+				symbol["relocations"].append(reloc)
+				# Note: I assume that this reloc will only match one symbol, and break for efficiency.
+				break
 
 	def read_symbol(self, symbol):
 		if symbol not in self.symbol_cache:
@@ -251,14 +299,80 @@ class Objdump:
 			assert len(self.symbol_cache[symbol]) == properties["size"], "BUG BUG BUG! Symbol ended up being the wrong size."
 		return self.symbol_cache[symbol]
 
+	def read_relocated_symbol(self, symbol_name, symbol_table, ignored_symbols):
+		symbol = self.symbols[symbol_name]
+		section = self.sections[symbol["section"]]
+		data = list(self.read_symbol(symbol_name))
+		ignore_indices = set()
+		for reloc in symbol["relocations"]:
+			# Because reloc["offset"] is the offset of the given relocation in the section,
+			# we first add the section's LMA to get a global address. We then subtract
+			# the symbol's address, which gives an offset into the list `data` from above.
+			reloc_target_address = reloc["offset"] + section["lma"]
+			data_offset = reloc_target_address - symbol["address"]
+			reloc_byte_size = relocation_byte_sizes[reloc["type"]]
+			assert 0 <= data_offset <= len(data) - reloc_byte_size, "Relocation isn't within bounds!"
+
+			if reloc["value"][0] in ignored_symbols:
+				print "IGNORING:", reloc["value"][0]
+				ignore_indices |= set(xrange(data_offset, data_offset + reloc_byte_size))
+				continue
+
+			# We now compute the actual value to insert at the relocation point.
+			reloc_value = symbol_table[reloc["value"][0]]["address"]
+			print "Name:", reloc["value"]
+			print "Value: %x" % reloc_value
+			reloc_value += reloc["value"][1]
+			print "Got:   %x" % reloc_value
+
+			# Apply the actual relocation.
+			if reloc["type"] == "R_X86_64_32":
+				data[data_offset : data_offset + reloc_byte_size] = struct.pack("<i", reloc_value)
+			elif reloc["type"] == "R_X86_64_PC32":
+				data[data_offset : data_offset + reloc_byte_size] = struct.pack("<i", reloc_value - reloc_target_address)
+			else:
+				print "Unhandled relocation type:", reloc["type"]
+		return "".join(data), ignore_indices
+
+		# Firstly, we read the symbol.
+#		properties = self.symbols[symbol]
+#		data = list(self.read_symbol(symbol))
+#		section = self.sections[properties["section"]]
+#		section_offset_start = properties["address"] - section["lma"]
+#		section_offset_end   = properties["address"] + properties["size"] - section["lma"]
+#		print "Symbol range: %i-%i" % (section_offset_start, section_offset_end)
+#		# We now proceed to apply all appropriate relocations to the read data.
+#		for reloc in relocations:
+#			if reloc["section"] != properties["section"]:
+#				continue
+#			if not (section_offset_start <= reloc["offset"] < section_offset_end):
+#				continue
+#			print "Found applicable reloc:", reloc
+
+#if __name__ == "__main__":
+#	o1 = Objdump("examples/counter")
+#	o2 = Objdump("examples/counter.o")
+#	o2.read_relocated_symbol("main", o2.relocations)
+#	exit()
+
 if __name__ == "__main__":
 	import pprint, sys
 	o = Objdump(sys.argv[1])
-	print "=== Sections:"
-	pprint.pprint(o.sections)
-	print "=== Symbols:"
-	pprint.pprint(o.symbols)
+#	print "=== Sections:"
+#	pprint.pprint(o.sections)
+#	print "=== Symbols:"
+#	pprint.pprint(o.symbols)
 	print "=== Function symbols:", o.function_symbols
 	print "=== Relocations:"
-	pprint.pprint(o.relocations)
+	pprint.pprint(o.symbols["main"])
+
+	o2 = Objdump("examples/counter")
+	ORIG = o2.read_symbol("main").encode("hex")
+
+	print "=== Read relocated:"
+	LATER, to_ignore = o.read_relocated_symbol("main", o2.symbols, o2.hard_to_locate_symbols)
+	LATER = LATER.encode("hex")
+
+	print ORIG
+	print color_diff(LATER, ORIG, to_ignore)
 
