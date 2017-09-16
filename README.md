@@ -28,7 +28,7 @@ There will be a simple program in there that counts up:
 This program has a function `int func(int x)` that returns `x + 1`, which is used for the counting.
 There's another program, `examples/counter_new` which was compiled from the same source, except a macro is defined making `func(x)` return `x + 2`, and thus this binary counts by twos:
 
-    $ ./examples/counter
+    $ ./examples/counter_new
     My pid: 12346
     Value: 2
     Value: 4
